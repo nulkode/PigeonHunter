@@ -1,0 +1,5 @@
+openai
+imapclient
+appdirs
+schedule
+html2text
