@@ -25,7 +25,7 @@ To re-add it or change settings, please restart the application after fixing the
             logger.error("Could not translate notification email: %s", e, exc_info=True)
 
     html_body = f"<pre>{html.escape(body_text)}</pre>"
-    imap_client.save_email("INBOX", subject, html_body)
+    new_message_id = imap_client.save_email("INBOX", subject, html_body)
 
 def process_emails(config, imap_client, translator, db_manager):
     logger.info("Starting email processing run...")
@@ -127,7 +127,7 @@ def process_emails(config, imap_client, translator, db_manager):
                     </html>
                     """
 
-                    imap_client.save_email(
+                    new_message_id = imap_client.save_email(
                         folder, 
                         translated_subject,
                         new_html_body,
@@ -136,6 +136,9 @@ def process_emails(config, imap_client, translator, db_manager):
                     
                     if message_id:
                         db_manager.add_processed(message_id)
+                    if new_message_id:
+                        db_manager.add_processed(new_message_id)
+                        logger.debug("Added translated email Message-ID %s to processed list.", new_message_id)
                 
                 elif result.get('status') == 'skip':
                     logger.info("Skipping email (UID: %s) - Language matched.", email['uid'])

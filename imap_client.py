@@ -140,6 +140,15 @@ class ImapClient:
                 envelope = data.get(b'ENVELOPE')
                 body_data = data.get(b'BODY[]')
                 
+                from_address = envelope.from_[0] if envelope.from_ else None
+                if from_address:
+                    mailbox = from_address.mailbox.decode() if from_address.mailbox else ""
+                    host = from_address.host.decode() if from_address.host else ""
+                    from_email_str = f"{mailbox}@{host}" if host else mailbox
+                    if from_email_str.lower() == self.user.lower():
+                        logger.debug("Skipping email UID %d from PigeonHunter itself (from: %s)", msgid, from_email_str)
+                        continue
+                
                 subject = envelope.subject.decode() if envelope.subject else "No Subject"
                 
                 message_id = None
@@ -179,8 +188,6 @@ class ImapClient:
             
         from email import policy
         
-        # Create a custom policy that allows long lines to prevent MIME encoding
-        # of Message-IDs with long SHA256 hashes in the local-part
         custom_policy = policy.default.clone(max_line_length=1000)
         
         msg = EmailMessage(policy=custom_policy)
@@ -196,9 +203,15 @@ class ImapClient:
         
         msg.add_alternative(html_body, subtype='html', charset='utf-8')
         
+        new_message_id = msg.get('Message-ID')
+        if new_message_id:
+            new_message_id = new_message_id.strip('<>')
+        
         try:
             self.client.select_folder(target_folder)
             self.client.append(target_folder, msg.as_bytes())
             logger.info("Saved new HTML email to %s with subject: %s", target_folder, subject)
+            return new_message_id
         except Exception as e:
             logger.error("Failed to save email to %s: %s", target_folder, e, exc_info=True)
+            return None
