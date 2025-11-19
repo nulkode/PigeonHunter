@@ -14,17 +14,6 @@ class DeadlineDetector:
         self.client = OpenAI(api_key=api_key)
 
     def detect_deadlines(self, subject, body, target_language):
-        """
-        Uses AI to detect deadlines and events in email content.
-
-        Args:
-            subject: Email subject
-            body: Email body text
-            target_language: Target language for event titles
-
-        Returns:
-            List of deadline dictionaries or empty list if none found
-        """
         logger.debug("Detecting deadlines in email (target_lang: %s)", target_language)
 
         system_prompt = f"""
@@ -68,7 +57,7 @@ Body:
         try:
             logger.debug("Sending deadline detection request to OpenAI...")
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5-mini",
                 response_format={"type": "json_object"},
                 messages=[
                     {"role": "system", "content": system_prompt},
@@ -78,7 +67,6 @@ Body:
 
             result = json.loads(response.choices[0].message.content)
 
-            # Handle both array and object with "events" key
             if isinstance(result, dict) and "events" in result:
                 deadlines = result["events"]
             elif isinstance(result, dict) and "deadlines" in result:
@@ -96,17 +84,6 @@ Body:
             return []
 
     def create_calendar_event(self, deadline_info, email_subject, email_body):
-        """
-        Creates an iCalendar event from deadline information.
-
-        Args:
-            deadline_info: Dictionary with deadline details
-            email_subject: Original email subject for reference
-            email_body: Original email body for reference
-
-        Returns:
-            iCalendar formatted string or None if error
-        """
         try:
             cal = Calendar()
             cal.add('prodid', '-//PigeonHunter Email Deadline//EN')
@@ -115,18 +92,15 @@ Body:
             event = Event()
             event.add('summary', deadline_info['title'])
 
-            # Build description with email context
             description = f"{deadline_info.get('description', '')}\n\n"
             description += f"--- Original Email ---\n"
             description += f"Subject: {email_subject}\n"
-            description += f"Content: {email_body[:500]}..."  # Limit body length
+            description += f"Content: {email_body[:500]}..."
             event.add('description', description)
 
-            # Parse date
             date_str = deadline_info['date']
             event_date = datetime.strptime(date_str, '%Y-%m-%d')
 
-            # Handle timezone
             tz_str = deadline_info.get('timezone', 'UTC')
             try:
                 tz = ZoneInfo(tz_str)
@@ -134,14 +108,11 @@ Body:
                 logger.warning("Invalid timezone '%s', using UTC", tz_str)
                 tz = ZoneInfo('UTC')
 
-            # Handle all-day vs timed events
             if deadline_info.get('all_day', False):
-                # All-day event
                 event.add('dtstart', event_date.date())
                 event.add('dtend', (event_date + timedelta(days=1)).date())
                 logger.debug("Created all-day event for %s", date_str)
             else:
-                # Timed event
                 start_time = deadline_info.get('start_time')
                 end_time = deadline_info.get('end_time')
 
@@ -154,20 +125,16 @@ Body:
                         hour, minute = map(int, end_time.split(':'))
                         end_dt = event_date.replace(hour=hour, minute=minute, tzinfo=tz)
                     else:
-                        # Estimate end time if not provided
                         end_dt = start_dt + timedelta(hours=1)
 
                     event.add('dtend', end_dt)
                     logger.debug("Created timed event from %s to %s", start_time, end_time or "estimated")
                 else:
-                    # Fallback to all-day if time parsing fails
                     event.add('dtstart', event_date.date())
                     event.add('dtend', (event_date + timedelta(days=1)).date())
 
-            # Add event to calendar
             cal.add_component(event)
 
-            # Return as string
             return cal.to_ical().decode('utf-8')
 
         except Exception as e:
@@ -175,17 +142,6 @@ Body:
             return None
 
     def process_email_deadlines(self, subject, body, target_language):
-        """
-        Complete pipeline: detect deadlines and generate calendar events.
-
-        Args:
-            subject: Email subject
-            body: Email body text
-            target_language: Target language for event titles
-
-        Returns:
-            List of tuples (deadline_info, ics_content) or empty list
-        """
         deadlines = self.detect_deadlines(subject, body, target_language)
 
         if not deadlines:

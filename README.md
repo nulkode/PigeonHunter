@@ -8,8 +8,8 @@ An automated email translation service that monitors IMAP folders and translates
 - Automatically translates emails using OpenAI's API
 - Preserves original email content alongside translations
 - Skips emails already in the target language
-- **AI-Powered Deadline Detection**: Automatically detects deadlines, events, and dates in emails
-- **Calendar Event Generation**: Creates iCalendar (.ics) files for detected events
+- Automatically detects deadlines, events, and dates in emails
+- Creates iCalendar (.ics) files for detected events
 - Configurable check intervals
 - Tracks processed emails to avoid duplicates
 
@@ -103,23 +103,6 @@ Generated calendar events are:
   - Timezone support with UTC fallback
 
 Simply open the attached `.ics` file to add the event to your calendar!
-
-## Debug Mode
-
-For testing purposes, you can enable debug mode by editing `debug_config.py`:
-
-```python
-DEBUG_SCAN_DSPH = True
-```
-
-When enabled:
-- **ONLY** emails with subjects starting with "DSPH" (Debug Scan for Pigeon Hunter) will be processed
-- All other emails are ignored (even if they're unread)
-- DSPH emails are scanned regardless of read/unread status
-- DSPH emails are NOT added to the processed database (allowing repeated testing)
-- All PigeonHunter features are available for DSPH emails (translation, deadline detection, etc.)
-
-This mode is designed for testing PigeonHunter features without affecting your normal email processing. Simply send yourself test emails with "DSPH" as the subject prefix.
 
 ## License
 

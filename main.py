@@ -94,7 +94,6 @@ def main():
 
         translator = Translator(config['openai']['api_key'])
 
-        # Initialize deadline detector if enabled in config OR if debug mode is active
         deadline_detector = None
         config_enabled = config.get('general', {}).get('enable_deadline_detection', False)
 

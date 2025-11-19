@@ -11,4 +11,4 @@ Set these flags to True to enable debug features.
 # - DSPH emails are processed regardless of read/unread status
 # - DSPH emails are NOT added to the processed database (can be tested repeatedly)
 # - All PigeonHunter features work normally on DSPH emails
-DEBUG_SCAN_DSPH = False
+DEBUG_SCAN_DSPH = True

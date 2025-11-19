@@ -239,7 +239,6 @@ class ImapClient:
 
         msg.add_alternative(html_body, subtype='html', charset='utf-8')
 
-        # Add attachments if provided
         if attachments:
             for attachment in attachments:
                 filename = attachment.get('filename', 'attachment')

@@ -35,7 +35,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
     non_translate_langs = config['translation']['non_translate_languages']
     target_lang = config['translation']['target_language']
 
-    # Deadline detection settings
     enable_deadline_detection = config.get('general', {}).get('enable_deadline_detection', False)
     detect_in_native = config.get('general', {}).get('detect_deadlines_in_native_language', False)
 
@@ -50,7 +49,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
         
         logger.info("Scanning folder: %s", folder)
         try:
-            # In debug mode, ONLY fetch DSPH emails and ignore all others
             if debug_config.DEBUG_SCAN_DSPH:
                 emails = imap_client.fetch_dsph_debug_emails(folder)
                 if emails:
@@ -58,7 +56,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                 else:
                     logger.debug("DEBUG MODE: No DSPH debug emails found in %s", folder)
             else:
-                # Normal mode: fetch unread emails
                 emails = imap_client.fetch_unread_emails(folder)
         except Exception as e:
             logger.error("Failed to fetch emails from %s: %s", folder, e, exc_info=True)
@@ -74,10 +71,8 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
 
             message_id = email['message_id']
 
-            # Check if this is a debug DSPH email
             is_debug_dsph = debug_config.DEBUG_SCAN_DSPH and email['subject'].startswith("DSPH")
 
-            # Skip processed emails UNLESS it's a debug DSPH email
             if not is_debug_dsph and message_id and db_manager.is_processed(message_id):
                 logger.debug("Skipping already processed Message-ID: %s", message_id)
                 continue
@@ -150,7 +145,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                     </html>
                     """
 
-                    # Detect deadlines for translated emails
                     attachments = []
                     if deadline_detector and (enable_deadline_detection or is_debug_dsph):
                         logger.debug("Detecting deadlines for translated email")
@@ -178,7 +172,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                         attachments=attachments if attachments else None
                     )
 
-                    # Don't add debug DSPH emails to processed database so they can be retested
                     if not is_debug_dsph:
                         if message_id:
                             db_manager.add_processed(message_id)
@@ -191,7 +184,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                 elif result.get('status') == 'skip':
                     logger.info("Skipping email (UID: %s) - Language matched.", email['uid'])
 
-                    # Check if we should detect deadlines in native language emails
                     if deadline_detector and (detect_in_native or is_debug_dsph):
                         logger.debug("Detecting deadlines for native language email")
                         calendar_events = deadline_detector.process_email_deadlines(
@@ -201,7 +193,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                         )
 
                         if calendar_events:
-                            # Create a minimal email with just calendar attachments
                             attachments = []
                             for deadline_info, ics_content in calendar_events:
                                 event_title = deadline_info.get('title', 'Event')
@@ -212,8 +203,7 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                                     'subtype': 'calendar'
                                 })
 
-                            # Create minimal email body
-                            calendar_subject = f"📅 Calendar Event from: {email['subject']}"
+                            calendar_subject = f"Calendar Event from: {email['subject']}"
                             calendar_html = f"""
                             <html>
                             <body>
@@ -237,7 +227,6 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                                 db_manager.add_processed(calendar_message_id)
                                 logger.info("Created calendar event email with %d attachment(s)", len(attachments))
 
-                    # Don't add debug DSPH emails to processed database so they can be retested
                     if not is_debug_dsph and message_id:
                         db_manager.add_processed(message_id)
                     elif is_debug_dsph:
