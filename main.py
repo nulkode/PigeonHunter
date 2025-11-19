@@ -101,11 +101,11 @@ def main():
         if config_enabled or debug_config.DEBUG_SCAN_DSPH:
             deadline_detector = DeadlineDetector(config['openai']['api_key'])
             if debug_config.DEBUG_SCAN_DSPH:
-                logger.warning("DEBUG MODE: DEBUG_SCAN_DSPH is enabled - will scan DSPH emails regardless of config")
+                logger.warning("DEBUG MODE: ONLY processing DSPH-prefixed emails (ignoring all others)")
             if config_enabled:
                 logger.info("Deadline detection enabled via configuration.")
             if not config_enabled and debug_config.DEBUG_SCAN_DSPH:
-                logger.info("Deadline detection enabled for debug DSPH emails only.")
+                logger.info("Deadline detection enabled for debug mode.")
         else:
             logger.info("Deadline detection disabled.")
 

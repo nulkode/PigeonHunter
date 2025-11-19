@@ -117,9 +117,9 @@ When enabled:
 - All other emails are ignored (even if they're unread)
 - DSPH emails are scanned regardless of read/unread status
 - DSPH emails are NOT added to the processed database (allowing repeated testing)
-- Deadline detection is enabled for DSPH emails even if disabled in configuration
+- All PigeonHunter features are available for DSPH emails (translation, deadline detection, etc.)
 
-This mode is designed for testing the deadline detection feature without affecting your normal email processing.
+This mode is designed for testing PigeonHunter features without affecting your normal email processing. Simply send yourself test emails with "DSPH" as the subject prefix.
 
 ## License
 
