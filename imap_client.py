@@ -6,6 +6,7 @@ import imaplib
 import html
 from email.message import EmailMessage
 from email import message_from_bytes
+from email.header import decode_header
 
 logger = logging.getLogger(__name__)
 
@@ -124,13 +125,26 @@ class ImapClient:
         envelope = data.get(b'ENVELOPE')
         body_data = data.get(b'BODY[]')
 
-        subject = envelope.subject.decode() if envelope.subject else "No Subject"
+        raw_subject = envelope.subject
+        if raw_subject:
+            decoded_parts = decode_header(raw_subject.decode() if isinstance(raw_subject, bytes) else raw_subject)
+            subject_parts = []
+            for content, encoding in decoded_parts:
+                if isinstance(content, bytes):
+                    subject_parts.append(content.decode(encoding or 'utf-8', errors='ignore'))
+                else:
+                    subject_parts.append(content)
+            subject = ''.join(subject_parts)
+        else:
+            subject = "No Subject"
 
         from_address = envelope.from_[0] if envelope.from_ else None
         if from_address:
-            sender_name = from_address.name.decode() if from_address.name else ""
-            if sender_name == "PigeonHunter":
-                logger.debug("Skipping email UID %d from PigeonHunter itself", msgid)
+            mailbox = from_address.mailbox.decode() if from_address.mailbox else ""
+            host = from_address.host.decode() if from_address.host else ""
+            from_email_str = f"{mailbox}@{host}" if host else mailbox
+            if from_email_str.lower() == self.user.lower():
+                logger.debug("Skipping email UID %d from PigeonHunter itself (from: %s)", msgid, from_email_str)
                 return None
 
         message_id = None
