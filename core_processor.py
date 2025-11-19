@@ -51,28 +51,43 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
         logger.info("Scanning folder: %s", folder)
         try:
             emails = imap_client.fetch_unread_emails(folder)
+
+            # Also fetch DSPH debug emails if debug mode is enabled
+            if debug_config.DEBUG_SCAN_DSPH:
+                dsph_emails = imap_client.fetch_dsph_debug_emails(folder)
+                if dsph_emails:
+                    logger.info("DEBUG MODE: Found %d DSPH debug email(s) in %s", len(dsph_emails), folder)
+                    # Merge DSPH emails with regular emails, avoiding duplicates by UID
+                    existing_uids = {email['uid'] for email in emails}
+                    for dsph_email in dsph_emails:
+                        if dsph_email['uid'] not in existing_uids:
+                            emails.append(dsph_email)
         except Exception as e:
             logger.error("Failed to fetch emails from %s: %s", folder, e, exc_info=True)
-            continue 
-        
+            continue
+
         if not emails:
             logger.info("No new emails in %s.", folder)
             continue
-            
-        logger.info("Found %d new emails in %s.", len(emails), folder)
+
+        logger.info("Found %d email(s) to process in %s.", len(emails), folder)
 
         for email in emails:
-            
-            message_id = email['message_id']
-            
-            if message_id and db_manager.is_processed(message_id):
-                logger.debug("Skipping already processed Message-ID: %s", message_id)
-                continue
 
-            logger.debug("Processing email UID %s (Subject: %s)", email['uid'], email['subject'])
+            message_id = email['message_id']
 
             # Check if this is a debug DSPH email
             is_debug_dsph = debug_config.DEBUG_SCAN_DSPH and email['subject'].startswith("DSPH")
+
+            # Skip processed emails UNLESS it's a debug DSPH email
+            if not is_debug_dsph and message_id and db_manager.is_processed(message_id):
+                logger.debug("Skipping already processed Message-ID: %s", message_id)
+                continue
+
+            if is_debug_dsph:
+                logger.info("DEBUG MODE: Processing DSPH email regardless of processed status (UID: %s)", email['uid'])
+
+            logger.debug("Processing email UID %s (Subject: %s)", email['uid'], email['subject'])
 
             try:
                 result = translator.translate_email(
@@ -165,11 +180,15 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                         attachments=attachments if attachments else None
                     )
 
-                    if message_id:
-                        db_manager.add_processed(message_id)
-                    if new_message_id:
-                        db_manager.add_processed(new_message_id)
-                        logger.debug("Added translated email Message-ID %s to processed list.", new_message_id)
+                    # Don't add debug DSPH emails to processed database so they can be retested
+                    if not is_debug_dsph:
+                        if message_id:
+                            db_manager.add_processed(message_id)
+                        if new_message_id:
+                            db_manager.add_processed(new_message_id)
+                            logger.debug("Added translated email Message-ID %s to processed list.", new_message_id)
+                    else:
+                        logger.debug("DEBUG MODE: Not adding DSPH email to processed database for retesting")
 
                 elif result.get('status') == 'skip':
                     logger.info("Skipping email (UID: %s) - Language matched.", email['uid'])
@@ -220,8 +239,11 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                                 db_manager.add_processed(calendar_message_id)
                                 logger.info("Created calendar event email with %d attachment(s)", len(attachments))
 
-                    if message_id:
+                    # Don't add debug DSPH emails to processed database so they can be retested
+                    if not is_debug_dsph and message_id:
                         db_manager.add_processed(message_id)
+                    elif is_debug_dsph:
+                        logger.debug("DEBUG MODE: Not adding DSPH email to processed database for retesting")
                 
                 else:
                     logger.error("Error processing email (UID: %s): %s. Will retry next time.", email['uid'], result.get('message'))
