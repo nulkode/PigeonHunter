@@ -177,36 +177,52 @@ class ImapClient:
             logger.error("Error fetching emails from %s: %s", folder_name, e, exc_info=True)
             return []
 
-    def save_email(self, target_folder, subject, html_body, original_message_id=None):
+    def save_email(self, target_folder, subject, html_body, original_message_id=None, attachments=None):
         if not self._ensure_connection():
             logger.error("Failed to save email to %s, no IMAP connection.", target_folder)
             return
-            
+
         logger.debug("Preparing to save email to %s.", target_folder)
         if not self.check_folder_exists(target_folder):
             self.create_folder(target_folder)
-            
+
         from email import policy
-        
+
         custom_policy = policy.default.clone(max_line_length=1000)
-        
+
         msg = EmailMessage(policy=custom_policy)
         msg['Subject'] = subject
         msg['From'] = f"PigeonHunter <{self.user}>"
         msg['To'] = self.user
-        
+
         if original_message_id:
             logger.debug("Linking email to original Message-ID: %s", original_message_id)
             formatted_id = f"<{original_message_id.strip('<>')}>"
             msg['In-Reply-To'] = formatted_id
             msg['References'] = formatted_id
-        
+
         msg.add_alternative(html_body, subtype='html', charset='utf-8')
-        
+
+        # Add attachments if provided
+        if attachments:
+            for attachment in attachments:
+                filename = attachment.get('filename', 'attachment')
+                content = attachment.get('content', '')
+                maintype = attachment.get('maintype', 'text')
+                subtype = attachment.get('subtype', 'calendar')
+
+                logger.debug("Attaching file: %s (%s/%s)", filename, maintype, subtype)
+                msg.add_attachment(
+                    content.encode('utf-8') if isinstance(content, str) else content,
+                    maintype=maintype,
+                    subtype=subtype,
+                    filename=filename
+                )
+
         new_message_id = msg.get('Message-ID')
         if new_message_id:
             new_message_id = new_message_id.strip('<>')
-        
+
         try:
             self.client.select_folder(target_folder)
             self.client.append(target_folder, msg.as_bytes())

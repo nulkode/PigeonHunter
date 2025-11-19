@@ -1,6 +1,8 @@
 import config_manager
 import logging
 import html
+import debug_config
+from deadline_detector import DeadlineDetector
 
 logger = logging.getLogger(__name__)
 
@@ -27,12 +29,16 @@ To re-add it or change settings, please restart the application after fixing the
     html_body = f"<pre>{html.escape(body_text)}</pre>"
     new_message_id = imap_client.save_email("INBOX", subject, html_body)
 
-def process_emails(config, imap_client, translator, db_manager):
+def process_emails(config, imap_client, translator, db_manager, deadline_detector=None):
     logger.info("Starting email processing run...")
     source_folders = list(config['imap']['source_folders'])
     non_translate_langs = config['translation']['non_translate_languages']
     target_lang = config['translation']['target_language']
-    
+
+    # Deadline detection settings
+    enable_deadline_detection = config.get('general', {}).get('enable_deadline_detection', False)
+    detect_in_native = config.get('general', {}).get('detect_deadlines_in_native_language', False)
+
     folders_to_remove = []
 
     for folder in source_folders: 
@@ -64,6 +70,10 @@ def process_emails(config, imap_client, translator, db_manager):
                 continue
 
             logger.debug("Processing email UID %s (Subject: %s)", email['uid'], email['subject'])
+
+            # Check if this is a debug DSPH email
+            is_debug_dsph = debug_config.DEBUG_SCAN_DSPH and email['subject'].startswith("DSPH")
+
             try:
                 result = translator.translate_email(
                     email['subject'],
@@ -71,15 +81,15 @@ def process_emails(config, imap_client, translator, db_manager):
                     target_lang,
                     non_translate_langs
                 )
-                
+
                 if result.get('status') == 'translated':
                     logger.info("Translating email (UID: %s).", email['uid'])
-                    
+
                     translated_subject = result['subject']
-                    
+
                     escaped_translation = html.escape(result['body'])
                     final_translation_html = escaped_translation.replace('\n', '<br>\n')
-                    
+
                     ref_html = ""
                     if message_id:
                         ref_html = f"""
@@ -117,9 +127,9 @@ def process_emails(config, imap_client, translator, db_manager):
                         <div class="pigeon-translation">
                             {final_translation_html}
                         </div>
-                        
+
                         {ref_html}
-                        
+
                         <div class="pigeon-original">
                             {email['original_html']}
                         </div>
@@ -127,21 +137,89 @@ def process_emails(config, imap_client, translator, db_manager):
                     </html>
                     """
 
+                    # Detect deadlines for translated emails
+                    attachments = []
+                    if deadline_detector and (enable_deadline_detection or is_debug_dsph):
+                        logger.debug("Detecting deadlines for translated email")
+                        calendar_events = deadline_detector.process_email_deadlines(
+                            email['subject'],
+                            email['rendered_text'],
+                            target_lang
+                        )
+                        for deadline_info, ics_content in calendar_events:
+                            event_title = deadline_info.get('title', 'Event')
+                            attachments.append({
+                                'filename': f"{event_title[:30]}.ics",
+                                'content': ics_content,
+                                'maintype': 'text',
+                                'subtype': 'calendar'
+                            })
+                        if attachments:
+                            logger.info("Attaching %d calendar event(s) to translated email", len(attachments))
+
                     new_message_id = imap_client.save_email(
-                        folder, 
+                        folder,
                         translated_subject,
                         new_html_body,
-                        original_message_id=message_id
+                        original_message_id=message_id,
+                        attachments=attachments if attachments else None
                     )
-                    
+
                     if message_id:
                         db_manager.add_processed(message_id)
                     if new_message_id:
                         db_manager.add_processed(new_message_id)
                         logger.debug("Added translated email Message-ID %s to processed list.", new_message_id)
-                
+
                 elif result.get('status') == 'skip':
                     logger.info("Skipping email (UID: %s) - Language matched.", email['uid'])
+
+                    # Check if we should detect deadlines in native language emails
+                    if deadline_detector and (detect_in_native or is_debug_dsph):
+                        logger.debug("Detecting deadlines for native language email")
+                        calendar_events = deadline_detector.process_email_deadlines(
+                            email['subject'],
+                            email['rendered_text'],
+                            target_lang
+                        )
+
+                        if calendar_events:
+                            # Create a minimal email with just calendar attachments
+                            attachments = []
+                            for deadline_info, ics_content in calendar_events:
+                                event_title = deadline_info.get('title', 'Event')
+                                attachments.append({
+                                    'filename': f"{event_title[:30]}.ics",
+                                    'content': ics_content,
+                                    'maintype': 'text',
+                                    'subtype': 'calendar'
+                                })
+
+                            # Create minimal email body
+                            calendar_subject = f"📅 Calendar Event from: {email['subject']}"
+                            calendar_html = f"""
+                            <html>
+                            <body>
+                                <p style="font-family: sans-serif;">
+                                    PigeonHunter detected {len(calendar_events)} deadline(s)/event(s) in this email.
+                                    Calendar event(s) are attached.
+                                </p>
+                            </body>
+                            </html>
+                            """
+
+                            calendar_message_id = imap_client.save_email(
+                                folder,
+                                calendar_subject,
+                                calendar_html,
+                                original_message_id=message_id,
+                                attachments=attachments
+                            )
+
+                            if calendar_message_id:
+                                db_manager.add_processed(calendar_message_id)
+                                logger.info("Created calendar event email with %d attachment(s)", len(attachments))
+
                     if message_id:
                         db_manager.add_processed(message_id)
                 

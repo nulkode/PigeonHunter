@@ -8,6 +8,7 @@ import core_processor
 from database_manager import DatabaseManager
 from imap_client import ImapClient
 from translator import Translator
+from deadline_detector import DeadlineDetector
 
 def setup_logging():
     logging.basicConfig(
@@ -23,17 +24,17 @@ def setup_logging():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-def run_job(config, imap_client, translator, db_manager):
+def run_job(config, imap_client, translator, db_manager, deadline_detector=None):
     logger = logging.getLogger(__name__)
     logger.info("Running scheduled job...")
-    
+
     try:
         if not imap_client.connect():
             logger.error("Failed to connect to IMAP. Skipping this run.")
             return
-            
-        core_processor.process_emails(config, imap_client, translator, db_manager)
-        
+
+        core_processor.process_emails(config, imap_client, translator, db_manager, deadline_detector)
+
     except Exception as e:
         logger.error("An unexpected error occurred during processing: %s", e, exc_info=True)
     finally:
@@ -89,8 +90,17 @@ def main():
             config['imap']['user'],
             config['imap']['password']
         )
-        
+
         translator = Translator(config['openai']['api_key'])
+
+        # Initialize deadline detector if enabled
+        deadline_detector = None
+        if config.get('general', {}).get('enable_deadline_detection', False):
+            deadline_detector = DeadlineDetector(config['openai']['api_key'])
+            logger.info("Deadline detection enabled.")
+        else:
+            logger.info("Deadline detection disabled.")
+
     except KeyError as e:
         logger.critical("Config file is missing a required key: %s. Exiting.", e)
         sys.exit()
@@ -99,19 +109,19 @@ def main():
     
     if config['general'].get('run_initial_scan', False):
         logger.info("Performing one-time initial scan as requested by config...")
-        run_job(config, imap, translator, db_manager)
-        
+        run_job(config, imap, translator, db_manager, deadline_detector)
+
         logger.debug("Disabling 'run_initial_scan' flag in config.")
         config['general']['run_initial_scan'] = False
         config_manager.save_config(config)
         logger.info("Initial scan complete.")
-    
+
     logger.info(f"Scheduling job every {interval} minutes.")
     print(f"--- PigeonHunter is running ---")
     print(f"Checking folders every {interval} minutes. Press Ctrl+C to stop.")
     print("Logs are being saved to 'pigeonhunter.log'")
 
-    schedule.every(interval).minutes.do(run_job, config, imap, translator, db_manager)
+    schedule.every(interval).minutes.do(run_job, config, imap, translator, db_manager, deadline_detector)
     
     try:
         while True:

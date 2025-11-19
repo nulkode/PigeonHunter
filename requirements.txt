@@ -3,3 +3,4 @@ imapclient
 appdirs
 schedule
 html2text
+icalendar
