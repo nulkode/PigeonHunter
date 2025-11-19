@@ -93,9 +93,9 @@ Body:
             event.add('summary', deadline_info['title'])
 
             description = f"{deadline_info.get('description', '')}\n\n"
-            description += f"--- Original Email ---\n"
+            description += f"--- Email ---\n"
             description += f"Subject: {email_subject}\n"
-            description += f"Content: {email_body[:500]}..."
+            description += f"{email_body[:500]}..."
             event.add('description', description)
 
             date_str = deadline_info['date']

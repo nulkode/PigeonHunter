@@ -149,8 +149,8 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
                     if deadline_detector and (enable_deadline_detection or is_debug_dsph):
                         logger.debug("Detecting deadlines for translated email")
                         calendar_events = deadline_detector.process_email_deadlines(
-                            email['subject'],
-                            email['rendered_text'],
+                            translated_subject,
+                            result['body'],
                             target_lang
                         )
                         for deadline_info, ics_content in calendar_events:
