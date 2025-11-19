@@ -102,7 +102,26 @@ def run_first_time_setup():
     run_initial_scan = initial_scan_input == 'y'
     config['general']['run_initial_scan'] = run_initial_scan
     logger.debug("Initial scan set to: %s", run_initial_scan)
-    
+
+    print("\n7. Deadline Detection")
+    print("This feature uses AI to detect deadlines, events, and dates in emails,")
+    print("then automatically creates calendar events (.ics files) attached to translated emails.")
+    deadline_detection_input = input("Enable deadline detection for translated emails? (y/n): ").strip().lower()
+    enable_deadline_detection = deadline_detection_input == 'y'
+    config['general']['enable_deadline_detection'] = enable_deadline_detection
+    logger.debug("Deadline detection set to: %s", enable_deadline_detection)
+
+    detect_in_native = False
+    if enable_deadline_detection:
+        print("\n8. Deadline Detection in Native Language")
+        print("Should PigeonHunter also detect deadlines in emails that are already in your language?")
+        print("(These won't be translated, but a calendar event will be attached as a new email)")
+        native_detection_input = input("Enable deadline detection in native language emails? (y/n): ").strip().lower()
+        detect_in_native = native_detection_input == 'y'
+        logger.debug("Deadline detection in native language set to: %s", detect_in_native)
+
+    config['general']['detect_deadlines_in_native_language'] = detect_in_native
+
     save_config(config)
     logger.info("--- Setup Complete! Configuration saved. ---")
     return True

@@ -5,9 +5,11 @@ import os
 import logging
 import config_manager
 import core_processor
+import debug_config
 from database_manager import DatabaseManager
 from imap_client import ImapClient
 from translator import Translator
+from deadline_detector import DeadlineDetector
 
 def setup_logging():
     logging.basicConfig(
@@ -23,17 +25,17 @@ def setup_logging():
     logging.getLogger("httpcore").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
 
-def run_job(config, imap_client, translator, db_manager):
+def run_job(config, imap_client, translator, db_manager, deadline_detector=None):
     logger = logging.getLogger(__name__)
     logger.info("Running scheduled job...")
-    
+
     try:
         if not imap_client.connect():
             logger.error("Failed to connect to IMAP. Skipping this run.")
             return
-            
-        core_processor.process_emails(config, imap_client, translator, db_manager)
-        
+
+        core_processor.process_emails(config, imap_client, translator, db_manager, deadline_detector)
+
     except Exception as e:
         logger.error("An unexpected error occurred during processing: %s", e, exc_info=True)
     finally:
@@ -89,29 +91,52 @@ def main():
             config['imap']['user'],
             config['imap']['password']
         )
-        
+
         translator = Translator(config['openai']['api_key'])
+
+        deadline_detector = None
+        config_enabled = config.get('general', {}).get('enable_deadline_detection', False)
+
+        if config_enabled or debug_config.DEBUG_SCAN_DSPH:
+            deadline_detector = DeadlineDetector(config['openai']['api_key'])
+            if debug_config.DEBUG_SCAN_DSPH:
+                logger.warning("DEBUG MODE: ONLY processing DSPH-prefixed emails (ignoring all others)")
+            if config_enabled:
+                logger.info("Deadline detection enabled via configuration.")
+            if not config_enabled and debug_config.DEBUG_SCAN_DSPH:
+                logger.info("Deadline detection enabled for debug mode.")
+        else:
+            logger.info("Deadline detection disabled.")
+
     except KeyError as e:
         logger.critical("Config file is missing a required key: %s. Exiting.", e)
         sys.exit()
     
     interval = config['general']['check_interval_minutes']
-    
-    if config['general'].get('run_initial_scan', False):
-        logger.info("Performing one-time initial scan as requested by config...")
-        run_job(config, imap, translator, db_manager)
-        
-        logger.debug("Disabling 'run_initial_scan' flag in config.")
-        config['general']['run_initial_scan'] = False
-        config_manager.save_config(config)
+
+    should_run_initial_scan = config['general'].get('run_initial_scan', False) or debug_config.DEBUG_SCAN_DSPH
+
+    if should_run_initial_scan:
+        if debug_config.DEBUG_SCAN_DSPH:
+            logger.info("DEBUG MODE: Running initial scan to process DSPH emails...")
+        else:
+            logger.info("Performing one-time initial scan as requested by config...")
+
+        run_job(config, imap, translator, db_manager, deadline_detector)
+
+        if config['general'].get('run_initial_scan', False):
+            logger.debug("Disabling 'run_initial_scan' flag in config.")
+            config['general']['run_initial_scan'] = False
+            config_manager.save_config(config)
+
         logger.info("Initial scan complete.")
-    
+
     logger.info(f"Scheduling job every {interval} minutes.")
     print(f"--- PigeonHunter is running ---")
     print(f"Checking folders every {interval} minutes. Press Ctrl+C to stop.")
     print("Logs are being saved to 'pigeonhunter.log'")
 
-    schedule.every(interval).minutes.do(run_job, config, imap, translator, db_manager)
+    schedule.every(interval).minutes.do(run_job, config, imap, translator, db_manager, deadline_detector)
     
     try:
         while True:
