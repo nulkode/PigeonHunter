@@ -119,22 +119,21 @@ class ImapClient:
         return rendered_text, original_html
 
 
-    def _process_email_data(self, msgid, data):
-        """Helper method to process email data from IMAP fetch."""
+    def _process_email_data(self, msgid, data, allow_self_emails=False):
         logger.debug("Fetching email with UID %d.", msgid)
         envelope = data.get(b'ENVELOPE')
         body_data = data.get(b'BODY[]')
 
+        subject = envelope.subject.decode() if envelope.subject else "No Subject"
+
         from_address = envelope.from_[0] if envelope.from_ else None
-        if from_address:
+        if from_address and not allow_self_emails:
             mailbox = from_address.mailbox.decode() if from_address.mailbox else ""
             host = from_address.host.decode() if from_address.host else ""
             from_email_str = f"{mailbox}@{host}" if host else mailbox
             if from_email_str.lower() == self.user.lower():
                 logger.debug("Skipping email UID %d from PigeonHunter itself (from: %s)", msgid, from_email_str)
                 return None
-
-        subject = envelope.subject.decode() if envelope.subject else "No Subject"
 
         message_id = None
         raw_msg_id = envelope.message_id
@@ -194,7 +193,6 @@ class ImapClient:
             logger.debug("DEBUG MODE: Scanning folder %s for DSPH emails", folder_name)
             self.client.select_folder(folder_name, readonly=True)
 
-            # Search for all emails with subject starting with DSPH
             message_ids = self.client.search(['SUBJECT', 'DSPH'])
 
             if not message_ids:
@@ -204,7 +202,7 @@ class ImapClient:
             logger.debug("Found %d DSPH debug email(s).", len(message_ids))
 
             for msgid, data in self.client.fetch(message_ids, ['ENVELOPE', 'BODY[]']).items():
-                email_data = self._process_email_data(msgid, data)
+                email_data = self._process_email_data(msgid, data, allow_self_emails=True)
                 if email_data and email_data['subject'].startswith("DSPH"):
                     emails_data.append(email_data)
 

@@ -113,14 +113,22 @@ def main():
         sys.exit()
     
     interval = config['general']['check_interval_minutes']
-    
-    if config['general'].get('run_initial_scan', False):
-        logger.info("Performing one-time initial scan as requested by config...")
+
+    should_run_initial_scan = config['general'].get('run_initial_scan', False) or debug_config.DEBUG_SCAN_DSPH
+
+    if should_run_initial_scan:
+        if debug_config.DEBUG_SCAN_DSPH:
+            logger.info("DEBUG MODE: Running initial scan to process DSPH emails...")
+        else:
+            logger.info("Performing one-time initial scan as requested by config...")
+
         run_job(config, imap, translator, db_manager, deadline_detector)
 
-        logger.debug("Disabling 'run_initial_scan' flag in config.")
-        config['general']['run_initial_scan'] = False
-        config_manager.save_config(config)
+        if config['general'].get('run_initial_scan', False):
+            logger.debug("Disabling 'run_initial_scan' flag in config.")
+            config['general']['run_initial_scan'] = False
+            config_manager.save_config(config)
+
         logger.info("Initial scan complete.")
 
     logger.info(f"Scheduling job every {interval} minutes.")
