@@ -5,6 +5,7 @@ import os
 import logging
 import config_manager
 import core_processor
+import debug_config
 from database_manager import DatabaseManager
 from imap_client import ImapClient
 from translator import Translator
@@ -93,11 +94,18 @@ def main():
 
         translator = Translator(config['openai']['api_key'])
 
-        # Initialize deadline detector if enabled
+        # Initialize deadline detector if enabled in config OR if debug mode is active
         deadline_detector = None
-        if config.get('general', {}).get('enable_deadline_detection', False):
+        config_enabled = config.get('general', {}).get('enable_deadline_detection', False)
+
+        if config_enabled or debug_config.DEBUG_SCAN_DSPH:
             deadline_detector = DeadlineDetector(config['openai']['api_key'])
-            logger.info("Deadline detection enabled.")
+            if debug_config.DEBUG_SCAN_DSPH:
+                logger.warning("DEBUG MODE: DEBUG_SCAN_DSPH is enabled - will scan DSPH emails regardless of config")
+            if config_enabled:
+                logger.info("Deadline detection enabled via configuration.")
+            if not config_enabled and debug_config.DEBUG_SCAN_DSPH:
+                logger.info("Deadline detection enabled for debug DSPH emails only.")
         else:
             logger.info("Deadline detection disabled.")
 
