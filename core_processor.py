@@ -50,18 +50,16 @@ def process_emails(config, imap_client, translator, db_manager, deadline_detecto
         
         logger.info("Scanning folder: %s", folder)
         try:
-            emails = imap_client.fetch_unread_emails(folder)
-
-            # Also fetch DSPH debug emails if debug mode is enabled
+            # In debug mode, ONLY fetch DSPH emails and ignore all others
             if debug_config.DEBUG_SCAN_DSPH:
-                dsph_emails = imap_client.fetch_dsph_debug_emails(folder)
-                if dsph_emails:
-                    logger.info("DEBUG MODE: Found %d DSPH debug email(s) in %s", len(dsph_emails), folder)
-                    # Merge DSPH emails with regular emails, avoiding duplicates by UID
-                    existing_uids = {email['uid'] for email in emails}
-                    for dsph_email in dsph_emails:
-                        if dsph_email['uid'] not in existing_uids:
-                            emails.append(dsph_email)
+                emails = imap_client.fetch_dsph_debug_emails(folder)
+                if emails:
+                    logger.info("DEBUG MODE: Found %d DSPH debug email(s) in %s (ignoring all other emails)", len(emails), folder)
+                else:
+                    logger.debug("DEBUG MODE: No DSPH debug emails found in %s", folder)
+            else:
+                # Normal mode: fetch unread emails
+                emails = imap_client.fetch_unread_emails(folder)
         except Exception as e:
             logger.error("Failed to fetch emails from %s: %s", folder, e, exc_info=True)
             continue

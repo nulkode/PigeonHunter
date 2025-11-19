@@ -112,7 +112,14 @@ For testing purposes, you can enable debug mode by editing `debug_config.py`:
 DEBUG_SCAN_DSPH = True
 ```
 
-When enabled, any email with a subject starting with "DSPH" (Debug Scan for Pigeon Hunter) will be scanned for deadlines regardless of your configuration settings.
+When enabled:
+- **ONLY** emails with subjects starting with "DSPH" (Debug Scan for Pigeon Hunter) will be processed
+- All other emails are ignored (even if they're unread)
+- DSPH emails are scanned regardless of read/unread status
+- DSPH emails are NOT added to the processed database (allowing repeated testing)
+- Deadline detection is enabled for DSPH emails even if disabled in configuration
+
+This mode is designed for testing the deadline detection feature without affecting your normal email processing.
 
 ## License
 
