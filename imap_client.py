@@ -119,7 +119,7 @@ class ImapClient:
         return rendered_text, original_html
 
 
-    def _process_email_data(self, msgid, data, allow_self_emails=False):
+    def _process_email_data(self, msgid, data):
         logger.debug("Fetching email with UID %d.", msgid)
         envelope = data.get(b'ENVELOPE')
         body_data = data.get(b'BODY[]')
@@ -127,12 +127,10 @@ class ImapClient:
         subject = envelope.subject.decode() if envelope.subject else "No Subject"
 
         from_address = envelope.from_[0] if envelope.from_ else None
-        if from_address and not allow_self_emails:
-            mailbox = from_address.mailbox.decode() if from_address.mailbox else ""
-            host = from_address.host.decode() if from_address.host else ""
-            from_email_str = f"{mailbox}@{host}" if host else mailbox
-            if from_email_str.lower() == self.user.lower():
-                logger.debug("Skipping email UID %d from PigeonHunter itself (from: %s)", msgid, from_email_str)
+        if from_address:
+            sender_name = from_address.name.decode() if from_address.name else ""
+            if sender_name == "PigeonHunter":
+                logger.debug("Skipping email UID %d from PigeonHunter itself", msgid)
                 return None
 
         message_id = None
@@ -202,7 +200,7 @@ class ImapClient:
             logger.debug("Found %d DSPH debug email(s).", len(message_ids))
 
             for msgid, data in self.client.fetch(message_ids, ['ENVELOPE', 'BODY[]']).items():
-                email_data = self._process_email_data(msgid, data, allow_self_emails=True)
+                email_data = self._process_email_data(msgid, data)
                 if email_data and email_data['subject'].startswith("DSPH"):
                     emails_data.append(email_data)
 
