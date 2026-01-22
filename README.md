@@ -32,6 +32,46 @@ An automated email translation service that monitors IMAP folders and translates
    pip install -r requirements.txt
    ```
 
+## Docker
+
+Build the image:
+
+```bash
+docker build -t pigeonhunter .
+```
+
+First-time setup (runs the interactive wizard and persists config/db/logs to your host):
+
+```bash
+docker run -it --rm \
+   -v $(pwd)/.pigeonhunter-config:/root/.config/PigeonHunter \
+   -v $(pwd)/pigeonhunter.log:/app/pigeonhunter.log \
+   pigeonhunter
+```
+
+Re-run the wizard later:
+
+```bash
+docker run -it --rm \
+   -v $(pwd)/.pigeonhunter-config:/root/.config/PigeonHunter \
+   -v $(pwd)/pigeonhunter.log:/app/pigeonhunter.log \
+   pigeonhunter --reconfig
+```
+
+Run the service in the background:
+
+```bash
+docker run -d --name pigeonhunter --restart unless-stopped \
+   -v $(pwd)/.pigeonhunter-config:/root/.config/PigeonHunter \
+   -v $(pwd)/pigeonhunter.log:/app/pigeonhunter.log \
+   pigeonhunter
+```
+
+Notes:
+- The mounted `.pigeonhunter-config` folder keeps your configuration and SQLite database between runs.
+- The mounted `pigeonhunter.log` file keeps logs on the host; remove that bind mount if you want logs only inside the container.
+- Add `-e TZ=Europe/Paris` (or similar) if you need a specific timezone inside the container.
+
 ## Configuration
 
 Run the application for the first time to start the setup wizard:
